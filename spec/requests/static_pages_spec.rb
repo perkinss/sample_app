@@ -21,15 +21,55 @@ describe "StaticPages" do
     describe "for signed-in users" do
       let(:user) { FactoryGirl.create(:user) }
       before do
-        FactoryGirl.create(:micropost, user: user, content: "Lorem ipsum")
-        FactoryGirl.create(:micropost, user: user, content: "Dolor sit amet")
+        FactoryGirl.create(:micropost, user: user, content: "Lorem")
         sign_in user
         visit root_path
       end
       
+      it "should have proper number and pluralization" do
+        expect(page).to have_content("1 micropost")
+        expect(user.feed.count).to be(1) 
+        FactoryGirl.create(:micropost, user: user, content: "Dolor sit amet")
+        visit root_path
+        expect(page).to have_content("2 microposts")
+        expect(user.feed.count).to be(2) 
+      end
+ 
+      
       it "should render the user's feed" do
         user.feed.each do |item|
           expect(page).to have_selector("li##{item.id}", text: item.content)
+        end
+      end
+      
+      describe "follower/following counts" do
+        let(:other_user) { FactoryGirl.create(:user) }
+        before do
+          other_user.follow!(user)
+          visit root_path
+        end
+        
+        it { should have_link("0 following", href: following_user_path(user)) }
+        it { should have_link("1 followers", href: followers_user_path(user)) } 
+      end
+      
+      it  "should paginate the user feed" do
+        50.times do
+          content = Faker::Lorem.sentence(5)
+          FactoryGirl.create(:micropost, user: user, content: content)        
+        end
+        
+        visit root_path
+        Micropost.paginate(page: 1).each do |micropost|
+          expect(page).to have_selector('li', text: micropost.content)
+        end                               
+      end
+      
+      it "should not have delete for other user's feed" do
+        user.feed.each do |item|
+          if item.user.id != user.id
+            expect(page).not_to have_selector("li##{item.id}", text: "delete")
+          end
         end
       end
     end
